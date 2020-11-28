@@ -1,7 +1,11 @@
-module "my-cache"
+module example
 
 go 1.15
 
-require lru v0.0.0
+require (
+	mycache v0.0.0
+)
 
-replace lru => ./lru
+replace  (
+	mycache => ./mycache
+)

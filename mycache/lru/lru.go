@@ -18,7 +18,7 @@ type Value interface {
 }
 
 type entry struct {
-	key string
+	key   string
 	value Value
 }
 

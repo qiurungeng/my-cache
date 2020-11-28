@@ -1,4 +1,4 @@
-package my_cache
+package mycache
 
 // 缓存值的抽象与封装
 type ByteView struct {

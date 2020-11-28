@@ -1,4 +1,4 @@
-package my_cache
+package mycache
 
 import (
 	"fmt"
@@ -20,8 +20,8 @@ func (gf GetterFunc) Get(key string) ([]byte, error) {
 }
 
 type Group struct {
-	name string
-	getter Getter
+	name      string
+	getter    Getter
 	mainCache cache
 }
 
