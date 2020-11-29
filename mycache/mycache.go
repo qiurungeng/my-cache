@@ -3,6 +3,7 @@ package mycache
 import (
 	"fmt"
 	"log"
+	"mycache/singleflight"
 	"sync"
 )
 
@@ -26,6 +27,7 @@ type Group struct {
 	getter    Getter	// 回调 Getter，在缓存不存在时，调用这个函数，得到源数据。
 	mainCache cache
 	nodes	  NodePicker
+	loader	  *singleflight.Group
 }
 
 var (
@@ -47,6 +49,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 		mainCache: cache{
 			cacheBytes: cacheBytes,
 		},
+		loader: &singleflight.Group{},
 	}
 	groups[name] = g
 	return g
@@ -76,16 +79,23 @@ func (g *Group) Get(key string) (ByteView, error) {
 
 // 从数据源载入
 func (g *Group) load(key string) (value ByteView, err error) {
-	if g.nodes != nil {
-		if node, ok := g.nodes.PickNode(key); ok{
-			if value, err := g.getFromNode(node, key); err == nil {
-				return value, err
+	result, err := g.loader.Do(key, func() (interface{}, error) {
+		if g.nodes != nil {
+			if node, ok := g.nodes.PickNode(key); ok{
+				if value, err := g.getFromNode(node, key); err == nil {
+					return value, err
+				}
+				log.Println("[MyCache Fail to Get From Node]", err)
 			}
-			log.Println("[MyCache Fail to Get From Node]", err)
 		}
+
+		// 本地数据源
+		return g.getLocally(key)
+	})
+	if err == nil {
+		return result.(ByteView), err
 	}
-	// 本地数据源
-	return g.getLocally(key)
+	return
 }
 
 // 从本地数据源获取
