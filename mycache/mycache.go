@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// A Getter loads data for a key.
+// Getter: 用来从数据源获取 kv
 type Getter interface {
 	Get(key string) ([]byte, error)
 }
@@ -19,10 +19,13 @@ func (gf GetterFunc) Get(key string) ([]byte, error) {
 	return gf(key)
 }
 
+// Group 是 GeeCache 最核心的数据结构，负责与用户的交互，并且控制缓存值存储和获取的流程。
+// Group 可以认为是一个缓存的命名空间，每个 Group 拥有一个唯一的名称 name
 type Group struct {
 	name      string
-	getter    Getter
+	getter    Getter	// 回调 Getter，在缓存不存在时，调用这个函数，得到源数据。
 	mainCache cache
+	nodes	  NodePicker
 }
 
 var (
@@ -73,7 +76,15 @@ func (g *Group) Get(key string) (ByteView, error) {
 
 // 从数据源载入
 func (g *Group) load(key string) (value ByteView, err error) {
-	// 此处仅用本地数据源
+	if g.nodes != nil {
+		if node, ok := g.nodes.PickNode(key); ok{
+			if value, err := g.getFromNode(node, key); err == nil {
+				return value, err
+			}
+			log.Println("[MyCache Fail to Get From Node]", err)
+		}
+	}
+	// 本地数据源
 	return g.getLocally(key)
 }
 
@@ -92,4 +103,21 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 // 数据源中获取的数据添加到缓存中
 func (g *Group) populateCache(key string, value ByteView) {
 	g.mainCache.add(key, value)
+}
+
+// 注册一个远程节点选择器
+func (g *Group) RegisterNodePicker(nodes NodePicker) {
+	if g.nodes != nil {
+		panic("RegisterNodePicker caller more than once")
+	}
+	g.nodes = nodes
+}
+
+// 访问远程节点，获取包装好的缓存值。
+func (g *Group) getFromNode(node NodeGetter, key string) (ByteView, error) {
+	bytes, err := node.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: bytes}, err
 }
